@@ -21,13 +21,14 @@ jobs:
       - name: Test
         run: go test ./...
 
-      - name: Build Linux binaries
-        run: make release-linux VERSION=${{ github.ref_name }}
+      - name: Build multi-arch binaries
+        run: make release VERSION=${{ github.ref_name }}
 
       - name: Checksums
         run: |
           cd dist
-          sha256sum file-access-tracer-linux-* > SHA256SUMS
+          sha256sum file-access-tracer-* > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Upload GitHub Release
         uses: softprops/action-gh-release@v2
@@ -35,5 +36,8 @@ jobs:
           files: |
             dist/file-access-tracer-linux-amd64
             dist/file-access-tracer-linux-arm64
+            dist/file-access-tracer-darwin-amd64
+            dist/file-access-tracer-darwin-arm64
             dist/SHA256SUMS
           generate_release_notes: true
+          fail_on_unmatched_files: true
