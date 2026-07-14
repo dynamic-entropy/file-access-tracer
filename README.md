@@ -1,86 +1,41 @@
 # file-access-tracer
 
-Go binary that reads XRootD `ofs.notify` events from a **FIFO** (recommended) or stdin and emits JSON access events. Used for SE read-access monitoring (Kafka / Rucio traces later).
+Go binary for XRootD `ofs.notify` read-access events → JSON (Kafka / Rucio traces later).
+
+**Site deploy:** install one binary + one XRootD config line. XRootD starts and manages the process via a pipe.
 
 ## Build
 
 ```bash
-cd file-access-tracer
 make build          # → bin/file-access-tracer
 make test
 ```
 
-Or:
+Cross-build for releases: `make release-linux`
 
-```bash
-go build -o file-access-tracer .
-```
+## Deploy on an SE
 
-Cross-build Linux release artifacts:
-
-```bash
-make release-linux  # → dist/file-access-tracer-linux-{amd64,arm64}
-```
-
-## Host on GitHub
-
-This directory is meant to be its **own repo** (do not nest under the dCache/XRootD clones long-term).
-
-```bash
-cd file-access-tracer
-git init
-git add .
-git commit -m "Initial file-access-tracer"
-gh repo create file-access-tracer --public --source=. --remote=origin --push
-```
-
-Releases: push a tag; Actions builds Linux binaries and attaches them to the GitHub Release.
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-Sites can then:
-
-```bash
-curl -fsSL -o file-access-tracer \
-  https://github.com/dynamic-entropy/file-access-tracer/releases/download/v0.1.0/file-access-tracer-linux-amd64
-sudo install -m 0755 file-access-tracer /usr/bin/file-access-tracer
-```
-
-## Deploy (systemd + XRootD)
-
-1. Install binary and unit:
+1. Install the binary:
 
 ```bash
 sudo make install
-# or copy bin + deploy/file-access-tracer.service manually to /usr/bin and /etc/systemd/system/
-sudo systemd-tmpfiles --create /usr/lib/tmpfiles.d/file-access-tracer.conf
-sudo systemctl daemon-reload
-sudo systemctl enable --now file-access-tracer
+# or: sudo install -m 0755 bin/file-access-tracer /usr/bin/file-access-tracer
 ```
 
-2. Point XRootD at the same FIFO (read opens only):
+2. XRootD config (`deploy/xrootd-ofs-notify.cfg`):
 
 ```
-ofs.notify openr >/var/run/xrootd/ofs.notify.fifo
+ofs.notify openr | /usr/bin/file-access-tracer
 ```
 
-(see `deploy/xrootd-ofs-notify.cfg`)
+3. Restart XRootD. Events are JSON lines on the tracer’s stdout.
 
-3. Restart XRootD, then check:
+## Host on GitHub
 
 ```bash
-journalctl -u file-access-tracer -f
+git tag v0.1.0 && git push origin v0.1.0
 ```
-
-Optional env overrides: `/etc/file-access-tracer/env` (`FIFO_PATH`, `EVENTS`).
-
-## Why FIFO
-
-Tracer lifecycle is independent of XRootD; restart the service without changing XRootD’s child process. Use `stdin` only for ad-hoc tests.
 
 ## CMS RSE validation campaign
 
-See [`campaign/`](campaign/): inventory table (`sites.csv`) and place→read→verify procedure for all CMS Rucio RSEs.
+See [`campaign/`](campaign/): `sites.csv` / `SITES.md` and place→read→verify procedure.

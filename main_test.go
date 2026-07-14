@@ -39,14 +39,10 @@ func TestParseEventFilterDefault(t *testing.T) {
 }
 
 func TestConsumeSkipsDisallowed(t *testing.T) {
-	in := strings.NewReader("" +
-		"a openr /r\n" +
-		"b closer /r\n" +
-		"c openw /w\n")
-	// smoke: parse filter only allows openr
 	allow := parseEventFilter("openr")
+	in := strings.NewReader("a openr /r\nb closer /r\nc openw /w\n")
+	_ = in
 	if len(allow) != 1 {
 		t.Fatalf("allow=%v", allow)
 	}
-	_ = in
 }

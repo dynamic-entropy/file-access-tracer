@@ -1,4 +1,4 @@
-// file-access-tracer reads XRootD ofs.notify lines from stdin or a FIFO.
+// file-access-tracer reads XRootD ofs.notify lines from stdin (piped by XRootD).
 package main
 
 import (
@@ -9,9 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -33,75 +31,36 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("file-access-tracer: ")
 
-	if len(os.Args) < 2 {
+	fs := flag.NewFlagSet("file-access-tracer", flag.ExitOnError)
+	events := fs.String("events", "openr", "comma-separated ofs.notify events to accept")
+	showVersion := fs.Bool("version", false, "print version and exit")
+	fs.Usage = usage
+	_ = fs.Parse(os.Args[1:])
+
+	if *showVersion || (fs.NArg() == 1 && fs.Arg(0) == "version") {
+		fmt.Println(version)
+		return
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "unexpected arguments: %v\n", fs.Args())
 		usage()
 		os.Exit(2)
 	}
 
-	switch os.Args[1] {
-	case "stdin":
-		runStdin(os.Args[2:])
-	case "fifo":
-		runFIFO(os.Args[2:])
-	case "version", "-version", "--version":
-		fmt.Println(version)
-	case "help", "-h", "--help":
-		usage()
-	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q\n", os.Args[1])
-		usage()
-		os.Exit(2)
-	}
+	consume(os.Stdin, parseEventFilter(*events))
 }
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `file-access-tracer %s
 
-Usage:
-  file-access-tracer stdin [-events openr]
-  file-access-tracer fifo -path /var/run/xrootd/ofs.notify.fifo [-events openr]
-  file-access-tracer version
+XRootD starts this binary once and pipes ofs.notify lines to stdin:
 
-For read-access popularity, enable only openr in XRootD:
+  ofs.notify openr | /usr/bin/file-access-tracer
 
-  ofs.notify openr >/var/run/xrootd/ofs.notify.fifo
-
-See deploy/file-access-tracer.service for systemd.
+Options:
+  -events string   comma-separated events to accept (default "openr")
+  -version         print version
 `, version)
-}
-
-func runStdin(args []string) {
-	fs := flag.NewFlagSet("stdin", flag.ExitOnError)
-	events := fs.String("events", "openr", "comma-separated ofs.notify events to accept")
-	_ = fs.Parse(args)
-	consume(os.Stdin, parseEventFilter(*events))
-}
-
-func runFIFO(args []string) {
-	fs := flag.NewFlagSet("fifo", flag.ExitOnError)
-	path := fs.String("path", "", "path to ofs.notify FIFO (required)")
-	events := fs.String("events", "openr", "comma-separated ofs.notify events to accept")
-	_ = fs.Parse(args)
-	if *path == "" {
-		log.Fatal("-path is required")
-	}
-
-	// O_RDWR so open does not block waiting for the XRootD writer.
-	f, err := os.OpenFile(*path, os.O_RDWR, 0)
-	if err != nil {
-		log.Fatalf("open fifo %s: %v", *path, err)
-	}
-	defer f.Close()
-
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sig
-		_ = f.Close()
-	}()
-
-	log.Printf("reading fifo %s (events=%s)", *path, *events)
-	consume(f, parseEventFilter(*events))
 }
 
 func parseEventFilter(spec string) map[string]struct{} {

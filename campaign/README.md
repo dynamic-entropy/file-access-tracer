@@ -54,7 +54,7 @@ Canonical columns in `sites.csv`:
 ### Other fields we may add later
 
 - `rse_type` (DISK/TAPE)
-- `kafka_topic` / `fifo_path`
+- `kafka_topic`
 - `wlcg_monit` (already sending to MONIT via wlcgConverter?)
 - `cms_site_id` / CRIC link
 
@@ -105,7 +105,7 @@ sequenceDiagram
 
 | `storage_tech` | Expected `capture_method` | Probe note |
 |----------------|---------------------------|------------|
-| XRootD / EOS | `ofs.notify` | `ofs.notify openr > fifo`; read via `root://` |
+| XRootD / EOS | `ofs.notify` | `ofs.notify openr \| /usr/bin/file-access-tracer`; read via `root://` |
 | dCache | `dcache.kafka` | billing Kafka on; read via door |
 | StoRM | `deferred` | skip until POSIX/WebDAV plan |
 
