@@ -18,7 +18,7 @@ install: build
 	install -d $(DESTDIR)/usr/share/file-access-tracer
 	install -m 0644 deploy/xrootd-ofs-notify.cfg $(DESTDIR)/usr/share/file-access-tracer/xrootd-ofs-notify.cfg
 
-# Cross-compile release artifacts for GitHub Releases.
+# Cross-compile release artifacts for all supported platforms.
 release:
 	mkdir -p dist
 	GOOS=linux  GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o dist/$(APP)-linux-amd64 .

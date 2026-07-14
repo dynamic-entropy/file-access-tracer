@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate campaign/SITES.md from sites.csv for readable GitHub viewing."""
+"""Generate campaign/SITES.md from sites.csv for human-readable browsing."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def main() -> int:
     lines.append("")
     lines.append(
         "Auto-generated from [`sites.csv`](sites.csv). "
-        "**CSV is the source of truth** for scripts; this Markdown is for browsing on GitHub."
+        "The CSV is the source of truth for automation; this Markdown summary is derived for browsing."
     )
     lines.append("")
     lines.append("Regenerate: `python scripts/render_sites_md.py`")
@@ -101,7 +101,7 @@ def main() -> int:
     lines.append("| ⬛ `out_of_scope` | Explicitly skipped |")
     lines.append("")
 
-    # Full table — compact columns for GitHub
+    # Full inventory table (compact columns)
     lines.append("## All RSEs")
     lines.append("")
     lines.append(

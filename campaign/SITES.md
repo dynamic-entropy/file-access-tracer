@@ -1,6 +1,6 @@
 # CMS RSE access-capture status
 
-Auto-generated from [`sites.csv`](sites.csv). **CSV is the source of truth** for scripts; this Markdown is for browsing on GitHub.
+Auto-generated from [`sites.csv`](sites.csv). The CSV is the source of truth for automation; this Markdown summary is derived for browsing.
 
 Regenerate: `python scripts/render_sites_md.py`
 

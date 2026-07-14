@@ -1,81 +1,72 @@
 # Access-capture validation campaign
 
-Track which CMS RSEs can report file **read** access into `file-access-tracer` / Kafka, then prove it with a place → read → verify loop.
+Inventory and validation status for CMS RSEs that should emit file read-access events into `file-access-tracer` (and eventually a shared Kafka topic).
 
-## Inventory table
+## Artifacts
 
 | Artifact | Role |
 |----------|------|
-| [`sites.csv`](sites.csv) | **Source of truth** for scripts (import, place/read/verify) |
-| [`SITES.md`](SITES.md) | GitHub-friendly view with emoji status (regenerate after CSV changes) |
+| [`sites.csv`](sites.csv) | Canonical inventory used by automation |
+| [`SITES.md`](SITES.md) | Human-readable status summary derived from the CSV |
 
-GitHub Markdown cannot color table rows with CSS. We use emoji + status sections in `SITES.md` instead:
+Regenerate the Markdown view after editing the CSV:
 
-| Emoji | `tracer_status` |
-|-------|-----------------|
+```bash
+python scripts/render_sites_md.py
+```
+
+Status indicators in `SITES.md`:
+
+| Indicator | `tracer_status` |
+|-----------|-----------------|
 | ⚪ | `not_started` |
 | 🟡 | `instrumented` |
 | ✅ | `validated` |
 | 🚫 | `blocked` |
 | ⬛ | `out_of_scope` |
 
-```bash
-python scripts/render_sites_md.py   # CSV → SITES.md
-```
+## CSV schema
 
-Canonical columns in `sites.csv`:
-
-| Column | Purpose |
-|--------|---------|
+| Column | Description |
+|--------|-------------|
 | `rse` | CMS Rucio RSE name (unique key) |
-| `site` | CMS site (e.g. `T2_CH_CERN`) |
-| `tier` | 0/1/2/3 if known |
+| `site` | CMS site identifier (for example `T2_CH_CERN`) |
+| `tier` | Tier level when known (`0`–`3`) |
 | `storage_tech` | `dCache` \| `XRootD` \| `EOS` \| `StoRM` \| `other` \| `unknown` |
-| `protocol_primary` | Scheme used for the probe read (`root`, `davs`, …) |
-| `endpoint_url` | Host/URL for the read protocol (fill later from Rucio protocol config) |
+| `protocol_primary` | Protocol used for the validation read (`root`, `davs`, …) |
+| `endpoint_url` | Endpoint for the read protocol |
 | `capture_method` | `ofs.notify` \| `dcache.kafka` \| `none` \| `deferred` \| `unknown` |
-| `tracer_status` | Lifecycle — see below |
-| `last_probe_at` | ISO timestamp of last validation attempt |
+| `tracer_status` | Lifecycle status (see below) |
+| `last_probe_at` | ISO-8601 timestamp of the last validation attempt |
 | `last_probe_result` | `pass` \| `fail` \| `skip` \| `pending` |
-| `probe_did` | Rucio DID used for the probe file (if any) |
-| `notes` | Free text |
-| `contact` | Site / SE contact |
+| `probe_did` | Rucio DID used for the probe, if any |
+| `notes` | Free-text notes |
+| `contact` | Site or storage contact |
 
-### `tracer_status` values
+### `tracer_status`
 
 | Status | Meaning |
 |--------|---------|
-| `not_started` | In inventory; no instrumentation yet |
-| `instrumented` | Capture configured at site (ofs.notify and/or dCache Kafka + tracer) |
-| `validated` | Probe place→read→capture succeeded |
-| `blocked` | Cannot instrument yet (e.g. StoRM POSIX-only) |
-| `out_of_scope` | Explicitly skipped |
+| `not_started` | Listed; capture not yet configured |
+| `instrumented` | Capture configured at the site |
+| `validated` | Place → read → capture probe succeeded |
+| `blocked` | Instrumentation not currently feasible |
+| `out_of_scope` | Explicitly excluded |
 
-### Other fields we may add later
+## Importing RSEs from CMS Rucio
 
-- `rse_type` (DISK/TAPE)
-- `kafka_topic`
-- `wlcg_monit` (already sending to MONIT via wlcgConverter?)
-- `cms_site_id` / CRIC link
-
-## Populate from CMS Rucio
-
-Requires venv with `rucio`, a CMS VOMS proxy, and [`rucio.cfg`](../../rucio.cfg) (see workspace root).
+Requires a CMS VOMS proxy and a Rucio client configuration for the CMS instance:
 
 ```bash
-cd /path/to/data-access-monit
-source .venv/bin/activate
-export X509_USER_PROXY=$PWD/x509_proxy
-export RUCIO_CONFIG=$PWD/rucio.cfg
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+export X509_USER_PROXY=/path/to/x509_proxy
+export RUCIO_CONFIG=/path/to/rucio.cfg
 
-python file-access-tracer/scripts/import_rses_from_rucio.py \
-  -o file-access-tracer/campaign/sites.csv
+python scripts/import_rses_from_rucio.py -o campaign/sites.csv
 ```
 
-`storage_tech` / `capture_method` are heuristics from hostname/prefix (`pnfs`→dCache, `eos`→EOS, else often XRootD). Correct manually when wrong (e.g. some StoRM sites look like plain XRootD). Re-import preserves existing `tracer_status`, probe fields, and manual `storage_tech` / `capture_method` / `notes`.
+`storage_tech` and `capture_method` are derived heuristically from hostname and path prefixes. Correct entries manually when the heuristic is wrong. Re-import preserves existing `tracer_status`, probe results, and manually edited `storage_tech`, `capture_method`, and `notes` fields.
 
-## Validation loop (place → read → check capture)
+## Validation procedure
 
 ```mermaid
 sequenceDiagram
@@ -83,35 +74,35 @@ sequenceDiagram
   participant Rucio as CMS_Rucio
   participant SE as RSE_storage
   participant Tracer as file_access_tracer
-  participant Check as verify_script
+  participant Check as Verification
 
-  Op->>Rucio: upload probe file to RSE
-  Rucio->>SE: store probe object
-  Op->>SE: read/open via protocol (root/davs)
-  SE->>Tracer: ofs.notify openr or dCache billing
-  Tracer->>Tracer: emit JSON or Kafka event
-  Check->>Tracer: query events for probe path/DID
-  Check-->>Op: pass or fail on sites.csv
+  Op->>Rucio: Place probe object on RSE
+  Rucio->>SE: Store probe object
+  Op->>SE: Read via data protocol
+  SE->>Tracer: Access event (ofs.notify or dCache billing)
+  Tracer->>Tracer: Emit JSON or Kafka event
+  Check->>Tracer: Match event for probe path or DID
+  Check-->>Op: Update sites.csv
 ```
 
-### Steps (manual v0; automate next)
+1. **Place** — upload a uniquely named probe object to the target RSE (or replicate one DID across RSEs).
+2. **Read** — open the replica using the site data protocol (`root://` or `davs://`), not only the SRM interface.
+3. **Verify** — confirm that a corresponding access event appears in tracer output or the Kafka topic within the expected latency.
+4. **Record** — update `last_probe_*`, `probe_did`, and set `tracer_status` to `validated` or retain `instrumented` with a failed result.
 
-1. **Place** — upload a small unique file to each target RSE (or one DID replicated to all). Name encodes RSE + timestamp.  
-2. **Read** — open/read that replica via the SE’s data protocol (`xrdcp` / davs), not only SRM.  
-3. **Check** — within N seconds, confirm an access event for that path exists in tracer output / Kafka `file-access.events`.  
-4. **Record** — set `last_probe_*`, `probe_did`, promote `tracer_status` → `validated` or leave `instrumented` + `fail`.
+### Expected capture by storage technology
 
-### Capture expectations by tech
+| `storage_tech` | Expected `capture_method` | Notes |
+|----------------|---------------------------|-------|
+| XRootD / EOS | `ofs.notify` | Configure `ofs.notify openr` piped to `file-access-tracer`; validate with a `root://` read |
+| dCache | `dcache.kafka` | Enable billing Kafka; validate with a door transfer |
+| StoRM | `deferred` | Out of scope until a POSIX/WebDAV capture path is defined |
 
-| `storage_tech` | Expected `capture_method` | Probe note |
-|----------------|---------------------------|------------|
-| XRootD / EOS | `ofs.notify` | `ofs.notify openr \| /usr/bin/file-access-tracer`; read via `root://` |
-| dCache | `dcache.kafka` | billing Kafka on; read via door |
-| StoRM | `deferred` | skip until POSIX/WebDAV plan |
+## Planned tooling
 
-## Next scripts (not written yet)
-
-- `scripts/import_rses_from_rucio.py` — fill/merge `sites.csv` from CMS Rucio  
-- `scripts/probe_place.py` — upload probe file(s)  
-- `scripts/probe_read.py` — read each replica  
-- `scripts/probe_verify.py` — match events → update CSV  
+| Script | Purpose |
+|--------|---------|
+| `scripts/import_rses_from_rucio.py` | Import and merge RSE inventory (implemented) |
+| `scripts/probe_place.py` | Upload probe objects |
+| `scripts/probe_read.py` | Perform protocol reads |
+| `scripts/probe_verify.py` | Match events and update `sites.csv` |
