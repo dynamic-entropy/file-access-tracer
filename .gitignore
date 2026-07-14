@@ -1,0 +1,9 @@
+# Binaries
+/bin/
+/dist/
+/file-access-tracer
+*.exe
+
+# Editor / OS
+.DS_Store
+*~
